@@ -8,7 +8,6 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
-import org.bukkit.util.Vector;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.*;
@@ -23,13 +22,6 @@ public class RailerEventListener implements Listener {
 
     public static final int MAX_EXPLORATION = 500000;
     public static final int POWER_PERIOD = 3;
-
-    public static final Vector NORTH = new Vector(-1, 0, 0);
-    public static final Vector SOUTH = new Vector(1, 0, 0);
-    public static final Vector EAST = new Vector(0, 0, -1);
-    public static final Vector WEST = new Vector(0, 0, 1);
-    public static final Vector UP = new Vector(0, 1, 0);
-    public static final Vector DOWN = new Vector(0, -1, 0);
 
     record RailEvent(Location location, boolean powerRail) {
     }
@@ -97,47 +89,6 @@ public class RailerEventListener implements Listener {
         } else {
             lastRailPlacedLocation.remove(identity);
         }
-    }
-
-    private boolean buildStraightPath(Location first, Location second, int powerPeriod, int powerFrom) {
-        var world = first.getWorld();
-        if (first.getBlockY() == second.getBlockY()) {
-            logger.info("Building path from " + first + " to " + second);
-            int commonY = first.getBlockY();
-            int i = 0;
-            if (first.getBlockX() == second.getBlockX()) {
-                int commonX = first.getBlockX();
-                if (first.getBlockZ() > second.getBlockZ()) {
-                    for (int z = first.getBlockZ(); z > second.getBlockZ(); --z) {
-                        placeRail(world, commonX, commonY, z, false, (i++ % powerPeriod) == powerFrom);
-                    }
-                } else {
-                    for (int z = first.getBlockZ(); z < second.getBlockZ(); ++z) {
-                        placeRail(world, commonX, commonY, z, false, (i++ % powerPeriod) == powerFrom);
-                    }
-                }
-            } else if (first.getBlockZ() == second.getBlockZ()) {
-                int commonZ = first.getBlockZ();
-                if (first.getBlockX() > second.getBlockX()) {
-                    for (int x = first.getBlockX(); x > second.getBlockX(); --x) {
-                        placeRail(world, x, commonY, commonZ, false, (i++ % powerPeriod) == powerFrom);
-                    }
-                } else {
-                    for (int x = first.getBlockX(); x < second.getBlockX(); ++x) {
-                        placeRail(world, x, commonY, commonZ, false, (i++ % powerPeriod) == powerFrom);
-                    }
-                }
-            } else {
-                logger.info("Not aligned: " + first + " / " + second);
-                return false;
-            }
-            logger.info("Path finished, " + i + " rails created");
-            return true;
-
-        } else {
-            logger.info("Not on the same level: " + first.getBlockZ() + " / " + second.getBlockZ());
-        }
-        return false;
     }
 
     private List<BlockChange> buildCurvyPath(final Location first, final Location second, final int powerPeriod, final int powerFrom, final int lampPeriod) {
@@ -368,27 +319,6 @@ public class RailerEventListener implements Listener {
         void undo() {
             location.getBlock().setType(before);
         }
-    }
-
-    private static int nearby(Location location, Material... materials) {
-        int ret = 0;
-        for (int modx = -1; modx <= 1; ++modx) {
-            for (int mody = -1; mody <= 1; ++mody) {
-                for (int modz = -1; modz <= 1; ++modz) {
-                    if (modx == 0 && mody == 0 && modz == 0) {
-                        continue;
-                    }
-                    var block = new Location(
-                            location.getWorld(),
-                            location.getBlockX() + modx,
-                            location.getBlockY() + mody,
-                            location.getBlockZ() + modz
-                    ).getBlock();
-                    if (materialIs(block.getType(), materials)) ret += 1;
-                }
-            }
-        }
-        return ret;
     }
 
     private static boolean materialIs(Material candidate, Material... materials) {

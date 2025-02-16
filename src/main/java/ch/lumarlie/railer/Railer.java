@@ -12,7 +12,7 @@ public final class Railer extends JavaPlugin {
 
     @Override
     public void onDisable() {
-        getLogger().info("Railer started");
+        getLogger().info("Railer stoped");
     }
 
 }
