@@ -1,4 +1,4 @@
-# Railer, a plugin for [Paper](https://papermc.io/) allowing to build long rails in few clicks
+# Railer, a plugin for [Paper](https://papermc.io/) allowing to build railways following ground shape in few clicks
 
 Disclaimer, this is a pet project yet working find as far as I know.
 
