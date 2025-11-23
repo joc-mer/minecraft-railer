@@ -6,9 +6,9 @@ if [ ! -d "test-server" ] || [ ! -f "test-server/paper.jar" ]; then
     mkdir -p test-server
     cd test-server
 
-    # Download Paper 1.21.1 (Build 115)
-    echo "Downloading Paper 1.21.1..."
-    curl -o paper.jar https://api.papermc.io/v2/projects/paper/versions/1.21.1/builds/115/downloads/paper-1.21.1-115.jar
+    # Download Paper 1.21.3 (Build 83)
+    echo "Downloading Paper 1.21.3..."
+    curl -o paper.jar https://api.papermc.io/v2/projects/paper/versions/1.21.3/builds/83/downloads/paper-1.21.3-83.jar
 
     # Accept EULA
     echo "eula=true" > eula.txt
