@@ -114,7 +114,7 @@ public class RailerEventListener implements Listener {
             XYZ prevXyz = prev != null ? prev.xyz : null;
             XYZ nextXyz = next.xyz;
 
-            if (cur != null) {
+            if (curXyz != null) {
                 boolean turn = prev != null && isTurn(prevXyz, curXyz, nextXyz);
                 XYZ[] lampDirs;
                 if (index % lampPeriod == lampPeriod - 1 && prevXyz != null) {
@@ -135,7 +135,7 @@ public class RailerEventListener implements Listener {
             }
             prev = cur;
             cur = next;
-            up = prevXyz != null && prevXyz.y() != curXyz.y();
+            up = prevXyz != null && curXyz != null && prevXyz.y() != curXyz.y();
             ++index;
         }
         if (cur != null) {
