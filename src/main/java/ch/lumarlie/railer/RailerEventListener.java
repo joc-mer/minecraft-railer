@@ -8,7 +8,8 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
-import org.jetbrains.annotations.NotNull;
+import lombok.NonNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 import java.util.logging.Logger;
@@ -38,7 +39,7 @@ public class RailerEventListener implements Listener {
     }
 
     @EventHandler
-    public void onPlayerBrakes(BlockBreakEvent event) {
+    public void onPlayerBrakes(@NonNull BlockBreakEvent event) {
         var player = event.getPlayer();
         var identity = player.identity();
 
@@ -55,7 +56,7 @@ public class RailerEventListener implements Listener {
     }
 
     @EventHandler
-    public void onPlayerBlock(BlockPlaceEvent event) {
+    public void onPlayerBlock(@NonNull BlockPlaceEvent event) {
         var player = event.getPlayer();
         var identity = player.identity();
 
@@ -91,7 +92,8 @@ public class RailerEventListener implements Listener {
         }
     }
 
-    private List<BlockChange> buildCurvyPath(final Location first, final Location second, final int powerPeriod, final int powerFrom, final int lampPeriod) {
+    private List<BlockChange> buildCurvyPath(@NonNull final Location first, @NonNull final Location second,
+            final int powerPeriod, final int powerFrom, final int lampPeriod) {
         List<BlockChange> ret = new ArrayList<>();
         var world = first.getWorld();
         var pathFinder = new PathFinder(logger, world);
@@ -116,9 +118,11 @@ public class RailerEventListener implements Listener {
                 boolean turn = prev != null && isTurn(prevXyz, curXyz, nextXyz);
                 XYZ[] lampDirs;
                 if (index % lampPeriod == lampPeriod - 1 && prevXyz != null) {
-                    lampDirs = curXyz.nsew().filter(xyz -> !areVerticallyAligned(xyz, prevXyz) && !areVerticallyAligned(xyz, nextXyz)).toArray(XYZ[]::new);
+                    lampDirs = curXyz.nsew()
+                            .filter(xyz -> !areVerticallyAligned(xyz, prevXyz) && !areVerticallyAligned(xyz, nextXyz))
+                            .toArray(XYZ[]::new);
                 } else {
-                    lampDirs = new XYZ[]{};
+                    lampDirs = new XYZ[] {};
                 }
                 boolean pusher = false;
                 if (noPusherSince >= powerPeriod && !turn) {
@@ -152,7 +156,7 @@ public class RailerEventListener implements Listener {
             this.world = world;
         }
 
-        public List<Step> findPSteps(Location fromLoc, Location toLoc) {
+        public List<Step> findPSteps(@NonNull Location fromLoc, @NonNull Location toLoc) {
             var from = XYZ.fromLocation(fromLoc);
             var to = XYZ.fromLocation(toLoc);
 
@@ -189,18 +193,29 @@ public class RailerEventListener implements Listener {
         }
 
         private void explore(XYZ to, Step from, XYZ next) {
-            var violatesRules = from.prev != null && (isStepTurn(from.prev.xyz, from.xyz, next) || isHole(from.prev.xyz, from.xyz, next) || areVerticallyAligned(from.prev.xyz, next));
-            var conflictingPath = from.stream().limit(12).anyMatch(pred -> areVerticallyAligned(pred.xyz, next) && Math.abs(pred.xyz.y() - next.y()) <= 4); // avoid blocking prev path
+            var violatesRules = from.prev != null && (isStepTurn(from.prev.xyz, from.xyz, next)
+                    || isHole(from.prev.xyz, from.xyz, next) || areVerticallyAligned(from.prev.xyz, next));
+            var conflictingPath = from.stream().limit(12)
+                    .anyMatch(pred -> areVerticallyAligned(pred.xyz, next) && Math.abs(pred.xyz.y() - next.y()) <= 4); // avoid
+                                                                                                                       // blocking
+                                                                                                                       // prev
+                                                                                                                       // path
             if (!stepMap.containsKey(next) && !violatesRules && !conflictingPath) {
                 var block = world.getBlockAt(next.x(), next.y(), next.z());
                 var blockBellow2 = world.getBlockAt(next.x(), next.y() - 2, next.z());
                 var blockBellow = world.getBlockAt(next.x(), next.y() - 1, next.z());
                 var blockAbove = world.getBlockAt(next.x(), next.y() + 1, next.z());
                 var healCost = elevation(from.xyz, next) * HEAL_COST;
-                var waterCost = (blockBellow.getType() == Material.WATER ? 2 : 0) + (block.getType() == Material.WATER ? 4 : 0) + (blockAbove.getType() == Material.WATER ? 6 : 0);
+                var waterCost = (blockBellow.getType() == Material.WATER ? 2 : 0)
+                        + (block.getType() == Material.WATER ? 4 : 0)
+                        + (blockAbove.getType() == Material.WATER ? 6 : 0);
                 var constructionCost = constructionCost(blockBellow.getType(), block.getType(), blockAbove.getType());
-                var destructionCost = to.equals(next) ? 0 : destructionCost(blockBellow2.getType(), blockBellow.getType(), block.getType(), blockAbove.getType());
-                var toAdd = new Step(from.index + 1, from.cost + healCost + constructionCost + destructionCost + waterCost, to.manhattan(next, HEAL_COST), next, from);
+                var destructionCost = to.equals(next) ? 0
+                        : destructionCost(blockBellow2.getType(), blockBellow.getType(), block.getType(),
+                                blockAbove.getType());
+                var toAdd = new Step(from.index + 1,
+                        from.cost + healCost + constructionCost + destructionCost + waterCost,
+                        to.manhattan(next, HEAL_COST), next, from);
                 heap.add(toAdd);
                 stepMap.put(next, toAdd);
             }
@@ -222,7 +237,6 @@ public class RailerEventListener implements Listener {
         return belowCost + onPathCost + aboveCost;
     }
 
-
     static class Step implements Comparable<Step>, Iterable<Step> {
         final int index;
         final int cost;
@@ -230,7 +244,7 @@ public class RailerEventListener implements Listener {
         final XYZ xyz;
         final Step prev;
 
-        public Step(int index, int cost, int distTo, XYZ xyz, Step prev) {
+        public Step(int index, int cost, int distTo, @NonNull XYZ xyz, @Nullable Step prev) {
             this.index = index;
             this.cost = cost;
             this.distTo = distTo;
@@ -239,12 +253,12 @@ public class RailerEventListener implements Listener {
         }
 
         @Override
-        public int compareTo(@NotNull Step o) {
+        public int compareTo(@NonNull Step o) {
             return (this.cost + this.distTo) - (o.cost + o.distTo);
         }
 
         @Override
-        public @NotNull Iterator<Step> iterator() {
+        public @NonNull Iterator<Step> iterator() {
             return new Iterator<>() {
                 Step cur = Step.this;
 
@@ -267,7 +281,8 @@ public class RailerEventListener implements Listener {
         }
     }
 
-    private List<BlockChange> placeRail(World world, int x, int y, int z, boolean heal, boolean pusher, XYZ... lightLocations) {
+    private List<BlockChange> placeRail(@NonNull World world, int x, int y, int z, boolean heal, boolean pusher,
+            @NonNull XYZ... lightLocations) {
         List<BlockChange> ret = new ArrayList<>(3);
         var aboveLoc = new Location(world, x, y + 1, z);
         var aboveAboveLoc = new Location(world, x, y + 2, z);
@@ -293,7 +308,8 @@ public class RailerEventListener implements Listener {
             Location bellowBaseLoc = lightLoc.down().toVector().toLocation(world);
             Location baseLoc = lightLoc.toVector().toLocation(world);
             Location lampLoc = lightLoc.up().toVector().toLocation(world);
-            if (lampLoc.getBlock().getType() == Material.AIR && bellowBaseLoc.getBlock().isSolid() && baseLoc.getBlock().getType().isEmpty()) {
+            if (lampLoc.getBlock().getType() == Material.AIR && bellowBaseLoc.getBlock().isSolid()
+                    && baseLoc.getBlock().getType().isEmpty()) {
                 ret.add(changeBlock(baseLoc, Material.BAMBOO_FENCE));
                 ret.add(changeBlock(lampLoc, Material.TORCH));
                 ret.add(changeBlock(lampLoc, Material.TORCH));
@@ -309,7 +325,7 @@ public class RailerEventListener implements Listener {
         return ret;
     }
 
-    static BlockChange changeBlock(Location location, Material newMaterial) {
+    static BlockChange changeBlock(@NonNull Location location, @NonNull Material newMaterial) {
         var currentMaterial = location.getBlock().getType();
         location.getBlock().setType(newMaterial);
         return new BlockChange(location, currentMaterial, newMaterial);
@@ -321,7 +337,7 @@ public class RailerEventListener implements Listener {
         }
     }
 
-    private static boolean materialIs(Material candidate, Material... materials) {
+    private static boolean materialIs(@NonNull Material candidate, @NonNull Material... materials) {
         for (Material material : materials) {
             if (candidate == material) {
                 return true;
