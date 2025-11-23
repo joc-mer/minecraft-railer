@@ -53,10 +53,8 @@ cmake-build-*/
 # File-based project format
 *.iws
 
-# IntelliJ
-out/
-
-# mpeltonen/sbt-idea plugin
+# Test Server
+test-server/
 .idea_modules/
 
 # JIRA plugin
@@ -168,3 +166,5 @@ gradle-app.setting
 *.hprof
 
 # End of https://www.toptal.com/developers/gitignore/api/java,gradle,intellij
+
+test-server/
