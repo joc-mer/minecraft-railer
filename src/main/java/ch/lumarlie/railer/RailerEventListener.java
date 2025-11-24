@@ -1,5 +1,6 @@
 package ch.lumarlie.railer;
 
+import lombok.NonNull;
 import net.kyori.adventure.identity.Identity;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -8,7 +9,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
-import lombok.NonNull;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
@@ -27,15 +28,23 @@ public class RailerEventListener implements Listener {
     record RailEvent(Location location, boolean powerRail) {
     }
 
-    record PathEvent(Location arrival, List<BlockChange> blockChanges) {
+    record PathEvent(Location arrival, List<BlockChanger.BlockChange> blockChanges) {
     }
 
     private final Map<Identity, RailEvent> lastRailPlacedLocation = new HashMap<>();
     private final Map<Identity, PathEvent> lastPathEvent = new HashMap<>();
     private final Logger logger;
+    private final MaterialChecker materialChecker;
+    private final BlockChanger blockChanger;
 
     public RailerEventListener(Logger logger) {
+        this(logger, new MaterialChecker.Default(), new BlockChanger.DefaultBlockChanger());
+    }
+
+    public RailerEventListener(Logger logger, MaterialChecker materialChecker, BlockChanger blockChanger) {
         this.logger = logger;
+        this.materialChecker = materialChecker;
+        this.blockChanger = blockChanger;
     }
 
     @EventHandler
@@ -50,7 +59,7 @@ public class RailerEventListener implements Listener {
         var lastPath = lastPathEvent.get(identity);
 
         if (lastPath != null && event.getBlock().getLocation().equals(lastPath.arrival)) {
-            lastPath.blockChanges().reversed().forEach(bc -> bc.undo());
+            lastPath.blockChanges().reversed().forEach(blockChanger::undo);
             lastPathEvent.remove(identity);
         }
     }
@@ -92,11 +101,11 @@ public class RailerEventListener implements Listener {
         }
     }
 
-    private List<BlockChange> buildCurvyPath(@NonNull final Location first, @NonNull final Location second,
-            final int powerPeriod, final int powerFrom, final int lampPeriod) {
-        List<BlockChange> ret = new ArrayList<>();
+    private List<BlockChanger.BlockChange> buildCurvyPath(@NonNull final Location first, @NonNull final Location second,
+                                                          final int powerPeriod, final int powerFrom, final int lampPeriod) {
+        List<BlockChanger.BlockChange> ret = new ArrayList<>();
         var world = first.getWorld();
-        var pathFinder = new PathFinder(logger, world);
+        var pathFinder = new PathFinder(logger, world, materialChecker);
         var steps = pathFinder.findPSteps(first, second);
         var coordinates = steps.stream().map(step -> step.xyz).map(XYZ::toString).collect(Collectors.joining("; "));
 
@@ -115,7 +124,7 @@ public class RailerEventListener implements Listener {
             XYZ nextXyz = next.xyz;
 
             if (curXyz != null) {
-                boolean turn = prev != null && isTurn(prevXyz, curXyz, nextXyz);
+                boolean turn = prevXyz != null && isTurn(prevXyz, curXyz, nextXyz);
                 XYZ[] lampDirs;
                 if (index % lampPeriod == lampPeriod - 1 && prevXyz != null) {
                     lampDirs = curXyz.nsew()
@@ -148,12 +157,14 @@ public class RailerEventListener implements Listener {
         public static final int HEAL_COST = 3;
         private final Logger logger;
         private final World world;
+        private final MaterialChecker materialChecker;
         private final Map<XYZ, Step> stepMap = new HashMap<>();
         private final PriorityQueue<Step> heap = new PriorityQueue<>();
 
-        public PathFinder(Logger logger, World world) {
+        public PathFinder(Logger logger, World world, MaterialChecker materialChecker) {
             this.logger = logger;
             this.world = world;
+            this.materialChecker = materialChecker;
         }
 
         public List<Step> findPSteps(@NonNull Location fromLoc, @NonNull Location toLoc) {
@@ -206,12 +217,14 @@ public class RailerEventListener implements Listener {
                 var blockBellow = world.getBlockAt(next.x(), next.y() - 1, next.z());
                 var blockAbove = world.getBlockAt(next.x(), next.y() + 1, next.z());
                 var healCost = elevation(from.xyz, next) * HEAL_COST;
-                var waterCost = (blockBellow.getType() == Material.WATER ? 2 : 0)
-                        + (block.getType() == Material.WATER ? 4 : 0)
-                        + (blockAbove.getType() == Material.WATER ? 6 : 0);
-                var constructionCost = constructionCost(blockBellow.getType(), block.getType(), blockAbove.getType());
+                var waterCost = (materialChecker.isWater(blockBellow.getType()) ? 2 : 0)
+                        + (materialChecker.isWater(block.getType()) ? 4 : 0)
+                        + (materialChecker.isWater(blockAbove.getType()) ? 6 : 0);
+                var constructionCost = constructionCost(materialChecker, blockBellow.getType(), block.getType(),
+                        blockAbove.getType());
                 var destructionCost = to.equals(next) ? 0
-                        : destructionCost(blockBellow2.getType(), blockBellow.getType(), block.getType(),
+                        : destructionCost(materialChecker, blockBellow2.getType(), blockBellow.getType(),
+                                block.getType(),
                                 blockAbove.getType());
                 var toAdd = new Step(from.index + 1,
                         from.cost + healCost + constructionCost + destructionCost + waterCost,
@@ -222,18 +235,19 @@ public class RailerEventListener implements Listener {
         }
     }
 
-    static int destructionCost(Material below2, Material below, Material onPath, Material above) {
-        var below2Cost = below2 == Material.RAIL || below2 == Material.POWERED_RAIL ? 150 : 0;
-        var belowCost = below == Material.RAIL || below == Material.POWERED_RAIL ? 150 : 0;
-        var pathCost = onPath == Material.RAIL || onPath == Material.POWERED_RAIL ? 150 : 0;
-        var aboveCost = above == Material.RAIL || above == Material.POWERED_RAIL ? 150 : 0;
+    static int destructionCost(MaterialChecker checker, Material below2, Material below, Material onPath,
+            Material above) {
+        var below2Cost = checker.isRail(below2) ? 150 : 0;
+        var belowCost = checker.isRail(below) ? 150 : 0;
+        var pathCost = checker.isRail(onPath) ? 150 : 0;
+        var aboveCost = checker.isRail(above) ? 150 : 0;
         return below2Cost + belowCost + pathCost + aboveCost;
     }
 
-    static int constructionCost(Material below, Material onPath, Material above) {
-        var belowCost = below.isSolid() ? 0 : 2;
-        var onPathCost = onPath.isAir() ? 0 : 1 + above.getMaxDurability() / 50;
-        var aboveCost = above.isAir() ? 0 : 1 + above.getMaxDurability() / 50;
+    static int constructionCost(MaterialChecker checker, Material below, Material onPath, Material above) {
+        var belowCost = checker.isSolid(below) ? 0 : 2;
+        var onPathCost = checker.isAir(onPath) ? 0 : 1 + checker.getMaxDurability(above) / 50;
+        var aboveCost = checker.isAir(above) ? 0 : 1 + checker.getMaxDurability(above) / 50;
         return belowCost + onPathCost + aboveCost;
     }
 
@@ -258,7 +272,7 @@ public class RailerEventListener implements Listener {
         }
 
         @Override
-        public @NonNull Iterator<Step> iterator() {
+        public @NotNull Iterator<Step> iterator() {
             return new Iterator<>() {
                 Step cur = Step.this;
 
@@ -281,26 +295,27 @@ public class RailerEventListener implements Listener {
         }
     }
 
-    private List<BlockChange> placeRail(@NonNull World world, int x, int y, int z, boolean heal, boolean pusher,
-            @NonNull XYZ... lightLocations) {
-        List<BlockChange> ret = new ArrayList<>(3);
+    private List<BlockChanger.BlockChange> placeRail(@NonNull World world, int x, int y, int z, boolean heal, boolean pusher,
+                                                     @NonNull XYZ... lightLocations) {
+        List<BlockChanger.BlockChange> ret = new ArrayList<>(3);
         var aboveLoc = new Location(world, x, y + 1, z);
         var aboveAboveLoc = new Location(world, x, y + 2, z);
-        ret.add(changeBlock(aboveLoc, Material.AIR));
+        ret.add(blockChanger.changeBlock(aboveLoc, Material.AIR));
         if (heal) {
-            ret.add(changeBlock(aboveAboveLoc, Material.AIR));
+            ret.add(blockChanger.changeBlock(aboveAboveLoc, Material.AIR));
         }
         var loc = new Location(world, x, y, z);
         var underLoc = new Location(loc.getWorld(), x, y - 1, z);
 
         if (pusher) {
-            ret.add(changeBlock(underLoc, Material.REDSTONE_BLOCK));
-            ret.add(changeBlock(loc, Material.POWERED_RAIL));
+            ret.add(blockChanger.changeBlock(underLoc, Material.REDSTONE_BLOCK));
+            ret.add(blockChanger.changeBlock(loc, Material.POWERED_RAIL));
         } else {
-            if (!underLoc.getBlock().getType().isSolid() || underLoc.getBlock().getType().isCompostable()) {
-                ret.add(changeBlock(underLoc, Material.DIRT));
+            if (!materialChecker.isSolid(underLoc.getBlock().getType())
+                    || materialChecker.isCompostable(underLoc.getBlock().getType())) {
+                ret.add(blockChanger.changeBlock(underLoc, Material.DIRT));
             }
-            ret.add(changeBlock(loc, Material.RAIL));
+            ret.add(blockChanger.changeBlock(loc, Material.RAIL));
         }
 
         boolean torchPlaced = false;
@@ -308,33 +323,22 @@ public class RailerEventListener implements Listener {
             Location bellowBaseLoc = lightLoc.down().toVector().toLocation(world);
             Location baseLoc = lightLoc.toVector().toLocation(world);
             Location lampLoc = lightLoc.up().toVector().toLocation(world);
-            if (lampLoc.getBlock().getType() == Material.AIR && bellowBaseLoc.getBlock().isSolid()
-                    && baseLoc.getBlock().getType().isEmpty()) {
-                ret.add(changeBlock(baseLoc, Material.BAMBOO_FENCE));
-                ret.add(changeBlock(lampLoc, Material.TORCH));
-                ret.add(changeBlock(lampLoc, Material.TORCH));
+            if (materialChecker.isAir(lampLoc.getBlock().getType())
+                    && materialChecker.isSolid(bellowBaseLoc.getBlock().getType())
+                    && materialChecker.isEmpty(baseLoc.getBlock().getType())) {
+                ret.add(blockChanger.changeBlock(baseLoc, Material.BAMBOO_FENCE));
+                ret.add(blockChanger.changeBlock(lampLoc, Material.TORCH));
+                ret.add(blockChanger.changeBlock(lampLoc, Material.TORCH));
                 torchPlaced = true;
                 break;
             }
         }
 
         if (lightLocations.length > 0 && !torchPlaced && !pusher) {
-            ret.add(changeBlock(underLoc, Material.GLOWSTONE));
+            ret.add(blockChanger.changeBlock(underLoc, Material.GLOWSTONE));
         }
 
         return ret;
-    }
-
-    static BlockChange changeBlock(@NonNull Location location, @NonNull Material newMaterial) {
-        var currentMaterial = location.getBlock().getType();
-        location.getBlock().setType(newMaterial);
-        return new BlockChange(location, currentMaterial, newMaterial);
-    }
-
-    record BlockChange(Location location, Material before, Material after) {
-        void undo() {
-            location.getBlock().setType(before);
-        }
     }
 
     private static boolean materialIs(@NonNull Material candidate, @NonNull Material... materials) {
